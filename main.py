@@ -28,7 +28,7 @@ def get_data(_src):
 if __name__ == '__main__':
     wb = workbook.Workbook()
     ws = wb.active
-    ws.append(['name', 'info'])
+    ws.append(['Title', 'Text'])
     _src = 'https://www.bing.com/news/search?q='+keyword+'&setmkt=en-us&setlang=en-us'
     get_data(_src)
     wb.save('result.xlsx')
