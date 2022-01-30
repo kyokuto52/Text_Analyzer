@@ -102,7 +102,7 @@ def EdgeProcessor(EdgeList: list):
         SourceList.append(i[0])
         TargetList.append(i[-1])
     return ' '.join(SourceList) + ' <SPL> ' + ' '.join(TargetList)
-
+    
 
 class DataGenerator(Dataset):
     def __init__(self, Iter, CodeDict: dict, DocDict: dict, Multiple: float, IsKG = False):

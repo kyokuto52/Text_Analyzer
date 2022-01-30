@@ -1,7 +1,0 @@
-###### Requirements without Version Specifiers ######`
-requests
-openpyxl
-bs4
-lxml
-
-###### Requirements with Version Specifiers ######`

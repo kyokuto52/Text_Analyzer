@@ -1,51 +1,72 @@
 from os import close
+from tkinter import Label
+from xmlrpc.client import boolean
 import torch
 import torch.nn as nn
 import jsonlines
+from string import punctuation
+from collections import Counter
+from torch.utils.data import Dataset, DataLoader
 
-class EncoderRNN(nn.Module):
-    def __init__(self, VocabSize, EmbeddingSize, hidden_size, BatchSize):
-        super(EncoderRNN, self).__init__()
-        self.hidden_size = hidden_size
-        self.BatchSize = BatchSize
-        self.VocabSize = VocabSize
-        self.EmbeddingSize = EmbeddingSize
-        self.num_layers = 1
-        self.embedding = nn.Embedding(VocabSize + 1 , hidden_size)
-        self.gru = nn.GRU(input_size = hidden_size,hidden_size = hidden_size, batch_first = True,num_layers=self.num_layers, bidirectional = True)
-        self.Dense = nn.Linear(hidden_size * 2, self.VocabSize)
+class Dictionary(object):
+    def __init__(self):
+        self.word2idx = {}
+        self.idx2word = []
+        self.counter = Counter()
+        self.total = 0
+
+    def add_word(self, word):
+        if word not in self.word2idx:
+            self.idx2word.append(word)
+            self.word2idx[word] = len(self.idx2word) - 1
+        token_id = self.word2idx[word]
+        self.counter[token_id] += 1
+        self.total += 1
+        return self.word2idx[word]
+
+    def __len__(self):
+        return len(self.idx2word)
+
+
+
+
+class DataGenerator(Dataset):
+    def __init__(self, Iter, ReviewDict: Dictionary = None):
+        self.samples = Iter
+        if ReviewDict:
+            self.ReviewDict = ReviewDict
+        # self.DocDict = Dictionary()
+
+    def __len__(self):
+        return len(self.samples)
+
+    def __getitem__(self, idx):
+        Review = self.ReviewTransformer(self.samples[idx]['Sample'])     #Size = [NodeNum, MaxNodeLen]
+        Label = self.LabelTransformer(self.samples[idx]['Label'])
+        return Review, Label
     
-    def forward(self, data, hidden):
-        x = self.embedding(data)
-        x, hidden = self.gru(x, hidden)
-        print()
-        x = self.Dense(x)
-        return x, hidden
-    def Init(self):
-        return torch.zeros((2, self.BatchSize, self.hidden_size ))
+    def ReviewTransformer(self, String: str):
+        Idx = []
+        for word in String.split():
+            Idx.append(self.ReviewDict.word2idx.get(word, self.ReviewDict.word2idx.get('<unk>')))
+        return torch.tensor(Idx)
+    def LabelTransformer(self, String: str):
+        return torch.tensor(int(String))
 
+def collate_batch(batch):
+    TextList = []
+    LabelList = []
+    for i in batch:
+        TextList.append(i[0])
+        LabelList.append(i[1])
+    TextList = torch.nn.utils.rnn.pad_sequence(TextList, batch_first = True, padding_value=0)
+    LabelList = torch.stack(LabelList)
+    if len(TextList) != len(LabelList):
+        raise ValueError
+    return {'Review': TextList, 'Label': LabelList}
 
-class Corpus(object):
-    def __init__(self, path):    #path requied dict path. 
-        import pickle
-        Fp = open('/Users/jthong/Desktop/GraphsGeneration/LowCodeVocab.pkl', 'rb')
-        self.CodeDic = pickle.load(Fp)
-        Fp = Fp.close()
-        # print(self.CodeDic.word2idx.get('<eos>'))
-    def DateGenerator(self, FilePath):
-        JsonFP = jsonlines.open(FilePath)
-        IdsSeq = []
-        for i in JsonFP:
-            Sample = i['RawCodes'].split() + ['<eos>']
-            ids = []
-            if Sample == '':
-                continue
-            for word in Sample:
-                ids.append(self.CodeDic.word2idx.get(word, self.CodeDic.word2idx.get('<unk>')))
-            # print(IdsSeq)
-            IdsSeq.append(torch.tensor(ids).type(torch.int64))
-        return torch.cat(IdsSeq)
-
-# corpus = Corpus('da')
-# a = corpus.DateGenerator('/Users/jthong/Desktop/GraphsGeneration/DataSet/Test/LowTest.jsonl')
-# print(a.shape)
+def DictionaryBuilder(SamplesIter: list, DictObject: Dictionary):
+        for i in SamplesIter:
+            for word in i['Sample'].split():
+                DictObject.add_word(word)
+        return DictObject
